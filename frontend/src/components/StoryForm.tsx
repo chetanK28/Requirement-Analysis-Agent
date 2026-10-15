@@ -9,8 +9,8 @@ export function StoryForm({providers, busy, onAnalyze}:{providers:Provider[]; bu
  <label>User story <span>Required · up to 12,000 characters</span><textarea aria-label="User story" maxLength={12000} rows={5} value={story} disabled={busy} onChange={e=>setStory(e.target.value)} placeholder="As a… I want… so that…"/></label>
  <label>Acceptance criteria <span>Optional</span><textarea maxLength={12000} rows={3} value={criteria} disabled={busy} onChange={e=>setCriteria(e.target.value)}/></label>
  <label>Context <span>Optional</span><textarea maxLength={12000} rows={3} value={context} disabled={busy} onChange={e=>setContext(e.target.value)}/></label>
- <label>LLM provider<select value={selected} disabled={busy} onChange={e=>setProvider(e.target.value)}>{providers.map(p=><option key={p.id} value={p.id} disabled={!p.enabled}>{p.id} · {p.model}{!p.enabled?' (API key required)':''}</option>)}</select></label>
- {providers.length>0 && !providers.some(p=>p.enabled) && <p className="notice">Configure OPENAI_API_KEY in backend/.env and restart the backend. Submitting will show the configuration error.</p>}
+ <label>LLM provider<select value={selected} disabled={busy} onChange={e=>setProvider(e.target.value)}>{providers.map(p=><option key={p.id} value={p.id} disabled={!p.enabled}>{p.id === 'openai' ? 'Capgemini GEP' : p.id} · {p.model}{!p.enabled?' (configuration required)':''}</option>)}</select></label>
+ {providers.length>0 && !providers.some(p=>p.enabled) && <p className="notice">Configure GENERATIVE_ENGINE_API_KEY, GENERATIVE_ENGINE_BASE_URL and GENERATIVE_ENGINE_MODEL in backend/.env and restart the backend. Submitting will show the configuration error.</p>}
  {error && <p role="alert">{error}</p>}
  <button className="primary" disabled={busy || !selected} type="submit">{busy?'Analyzing…':'Analyze'}</button><p className="small">Source text is sent to the selected provider. Every result requires human review.</p>
  </form>;

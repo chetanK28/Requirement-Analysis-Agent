@@ -1,6 +1,6 @@
 # Requirement Analysis Agent
 
-A React + FastAPI proof of concept that turns a story into five editable analysis sections using OpenAI structured outputs. Every response is a **draft for human review**. No database or fake LLM output is used.
+A React + FastAPI proof of concept that turns a story into five editable analysis sections using Capgemini GEP with the OpenAI-compatible SDK. Every response is a **draft for human review**. No database or fake LLM output is used.
 
 ## Prerequisites
 
@@ -14,17 +14,35 @@ From the workspace:
 cd C:\Users\CHETAN\Desktop\POC\requirement-agent\backend
 py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-Copy-Item .env.example .env
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 notepad .env
 ```
 
-In the local `.env`, set `OPENAI_API_KEY` to your own API key. Leave `OPENAI_MODEL=gpt-6-luna`, or explicitly set another structured-output-capable model available to your account. Model access and billing depend on your account. No automatic model/provider fallback occurs. Never put keys in frontend variables, source files, or screenshots. No real secret is provided or committed. The app starts without a key and reports a configuration error when analysis is requested. Restart the backend after changing settings.
+In the existing `backend/.env`, set these backend-only settings (do not overwrite an existing file with `.env.example`):
+
+```text
+GENERATIVE_ENGINE_API_KEY=<your-company-gateway-key>
+GENERATIVE_ENGINE_BASE_URL=replace_with_OpenAI_API_reference_server_URL
+GENERATIVE_ENGINE_MODEL=<exact-enabled-model-id-from-GEP-Studio>
+LLM_TIMEOUT_SECONDS=60
+```
+
+The model intentionally has no default. `openai.gpt-5-nano` appeared only as an example in the slides described by the user; use it only if enabled for your GEP Studio. Old `OPENAI_API_KEY`/`OPENAI_MODEL` settings are ignored. No automatic model, endpoint or provider fallback occurs. Never put the gateway key in frontend settings, source, logs or Git. Restart the backend after changing settings. Without a key or model, startup still works and Analyze reports a configuration error.
+
+The existing operation remains **Responses API**: `client.responses.parse`, sending `POST <OpenAI-reference-server-URL>/responses`, the existing Pydantic `Analysis` JSON schema and `store=False`. No GEP starter-kit configuration or company setup slides were present in the repository, so gateway operation support and account-specific model availability are **unconfirmed**. The supplied base URL alone does not confirm Responses support. Before using the app, check your GEP Studio starter-kit sample/API documentation for:
+
+- The exact model ID enabled for your Studio and the key's access permissions.
+- Support for Responses API (`POST /v1/responses`), strict structured JSON-schema output, and `store=False` for that model.
+- Whether the starter kit instead documents only Chat Completions (`POST /v1/chat/completions`). If Responses is unsupported, provide that non-secret sample so the adapter can be changed explicitly while preserving the analysis schema. The app does not silently switch.
+- Key activation, quota/budget, and required corporate network/VPN access.
+
+No live GEP calls were made during this update. No real `.env` values were read or changed. Tests use synthetic configuration and mocked HTTP transports.
 
 In a second PowerShell terminal:
 
 ```powershell
 cd C:\Users\CHETAN\Desktop\POC\requirement-agent\frontend
-Copy-Item .env.example .env
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 npm.cmd install
 ```
 
@@ -81,8 +99,20 @@ Implement `Provider` in `backend/app/providers/base.py`: `name`, `model`, `enabl
 
 ## Design and limitations
 
-The OpenAI adapter uses the supported Python SDK `AsyncOpenAI.responses.parse` with a Pydantic schema, as documented in the [official structured outputs guide](https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=responses). The backend validates the response again, repairs invalid/duplicate IDs deterministically, checks exact evidence substrings against story/acceptance criteria, and downgrades unsupported explicit claims to inferred. Context-only evidence cannot make a claim explicit. Supported quotes do not prove semantic correctness; human review remains essential.
+The GEP adapter uses the supported Python SDK `AsyncOpenAI.responses.parse` with a Pydantic schema, as documented in the [official structured outputs guide](https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=responses). The backend validates the response again, repairs invalid/duplicate IDs deterministically, checks exact evidence substrings against story/acceptance criteria, and downgrades unsupported explicit claims to inferred. Context-only evidence cannot make a claim explicit. Supported quotes do not prove semantic correctness; human review remains essential.
 
 The versioned system prompt treats story text as untrusted data and prohibits invented business rules and numeric NFR thresholds. Prompt injection and hallucinations cannot be eliminated by prompting or substring checks. Validate meaning, missing constraints, and numbers yourself. Edits are reviewer annotations; evidence and classification remain those of the original analysis. Stable IDs are deterministic for the same ordered response; separate LLM runs can vary.
 
-No persistence, authentication, cross-user collaboration, automatic approval, or production deployment is included. The backend does not log stories or keys. Submitted text is sent to OpenAI; `store=False` is used, but applicable provider data policies still apply. Live analysis requires a valid key, quota, network connectivity, and model access. The default model is configurable and never silently substituted.
+No persistence, authentication, cross-user collaboration, automatic approval, or production deployment is included. The backend does not log stories or keys. Submitted text is sent to Capgemini GEP; `store=False` is used, but applicable provider data policies still apply. Live analysis requires a valid key, quota, network connectivity, and model access. The model must be explicitly configured and is never silently substituted.
+
+## Diagnose AI Passport Gateway authentication/access
+
+No Gateway screenshots or OpenAI API reference were available in the repository/attachments for this update. The earlier server URL is no longer a built-in default. Do not infer a server URL from the REST API reference or use `/v2/llm/invoke` with this adapter.
+
+In AI Passport Gateway, open **OpenAI API reference** (not REST API reference). Copy the selected **Servers** URL exactly into `GENERATIVE_ENGINE_BASE_URL`. Copy the authentication header name and scheme from its **Authorize / Security** section or generated OpenAI-compatible example. Do not share a credential-bearing example. This adapter currently uses the OpenAI SDK's `Authorization: Bearer <key>` behavior. That behavior is not verified against your GEP reference; if the reference specifies something else, provide only the non-secret header name/scheme and server URL so the adapter can be adjusted without guessing.
+
+Open **GEP Models Catalog**, select the intended Studio, and copy the exact enabled model identifier into `GENERATIVE_ENGINE_MODEL`. No model is assumed. Verify the model supports the Responses endpoint and structured output. No operation fallback is implemented; if the company reference documents only Chat Completions, the adapter needs an explicit change after that reference is available.
+
+401 and 403 are distinct: 401 prompts checks of server/authentication/key validity; 403 prompts checks of Studio access, key permissions, model entitlements and network policy. These statuses alone do not establish the root cause. Logs contain numeric status, allowlisted upstream codes and fixed safe descriptions; arbitrary upstream messages, request headers and keys are never copied into diagnostics.
+
+The backend accepts only HTTPS server URLs on Capgemini subdomains, without embedded credentials/query strings, and rejects known REST invoke and operation URLs. If the documented OpenAI server uses another company-approved domain, adjust the host policy only after verifying that reference.

@@ -20,14 +20,14 @@ describe('review workflow',()=>{
   fireEvent.change(screen.getByLabelText('User story'),{target:{value:'reset password'}});fireEvent.click(screen.getByText('Analyze'));
   expect(screen.getByRole('status')).toHaveTextContent('Analyzing');expect(screen.getByText('Analyzing…')).toBeDisabled();
   resolve(structuredClone(result));await screen.findByText('Analysis draft');
-  expect(screen.getByText('explicit')).toBeInTheDocument();expect(screen.getByText('reset password',{selector:'blockquote'})).toBeInTheDocument();expect(screen.getAllByText('No findings in this section.')).toHaveLength(4);
+  expect(screen.getAllByText(/Capgemini GEP/).length).toBeGreaterThan(0);expect(screen.getByText('explicit')).toBeInTheDocument();expect(screen.getByText('reset password',{selector:'blockquote'})).toBeInTheDocument();expect(screen.getAllByText('No findings in this section.')).toHaveLength(4);
   fireEvent.change(screen.getByLabelText('Title FR-1'),{target:{value:'Revised reset'}});expect(screen.getByLabelText('Title FR-1')).toHaveValue('Revised reset');
   fireEvent.change(screen.getByLabelText('Review FR-1'),{target:{value:'accepted'}});expect(screen.getByLabelText('Review FR-1')).toHaveValue('accepted');
   fireEvent.change(screen.getByLabelText('Review FR-1'),{target:{value:'rejected'}});expect(screen.getByLabelText('Review FR-1')).toHaveValue('rejected');
  });
  it('shows provider errors',async()=>{
-  vi.mocked(analyzeStory).mockRejectedValue(new Error('Set OPENAI_API_KEY'));render(<App/>);await waitFor(()=>expect(screen.getByText('Analyze')).toBeEnabled());
-  fireEvent.click(screen.getByText('Load example'));fireEvent.click(screen.getByText('Analyze'));expect(await screen.findByRole('alert')).toHaveTextContent('Set OPENAI_API_KEY');
+  vi.mocked(analyzeStory).mockRejectedValue(new Error('Configure GENERATIVE_ENGINE_API_KEY'));render(<App/>);await waitFor(()=>expect(screen.getByText('Analyze')).toBeEnabled());
+  fireEvent.click(screen.getByText('Load example'));fireEvent.click(screen.getByText('Analyze'));expect(await screen.findByRole('alert')).toHaveTextContent('Configure GENERATIVE_ENGINE_API_KEY');
  });
  it('exports review decisions and downloads both formats',()=>{
   const reviewed=structuredClone(result);reviewed.analysis.functional_requirements[0].review='accepted';
