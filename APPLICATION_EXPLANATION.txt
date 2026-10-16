@@ -1,0 +1,639 @@
+REQUIREMENT ANALYSIS AGENT - COMPLETE APPLICATION EXPLANATION
+============================================================
+Source-code review date: 16 October 2026
+No real environment-file contents or secrets were read for this guide.
+
+CONTENTS
+1. Purpose and scope
+2. Architecture and technology
+3. Files and responsibilities
+4. Complete application flow
+5. API contracts and data structures
+6. Prompt and structured output
+7. IDs, evidence and classification
+8. GEP configuration and authentication
+9. Frontend review and exports
+10. Errors and safe diagnostics
+11. Security and data lifecycle
+12. Windows setup and startup
+13. Tests and build
+14. Troubleshooting
+15. Extension points and limitations
+16. Example walkthrough
+
+
+1. PURPOSE AND SCOPE
+--------------------
+This proof of concept helps an analyst, product owner, developer or tester turn
+a user story into a structured requirement-analysis draft. It assists a human;
+it does not approve requirements or execute changes in business systems.
+
+Inputs:
+- Required user story: who needs something, what they need and why.
+- Optional acceptance criteria: stated conditions for success.
+- Optional context: background that helps interpretation.
+- Provider selection: currently displayed as Capgemini GEP.
+
+The five output sections are:
+- Functional requirements: expected capabilities and behavior.
+- Non-functional requirements: quality concerns and stated constraints.
+- Risks: potential problems and uncertainties.
+- Assumptions: tentative interpretations to validate.
+- Clarification questions: missing information needed to finalize requirements.
+
+Every finding has an ID, title, description, evidence and explicit/inferred label.
+The reviewer can edit its title/description, accept or reject it and export the
+draft. There is no database, login, saved project history or approval engine.
+
+
+2. ARCHITECTURE AND TECHNOLOGY
+------------------------------
+Data flow:
+
+Browser / React (localhost:5173)
+  -> HTTP JSON -> FastAPI (localhost:8000)
+  -> Input validation -> Provider registry -> Analysis service
+  -> OpenAI-compatible Python SDK -> Company GEP gateway -> Configured model
+  -> Parsed output -> Schema validation -> ID/evidence checks
+  -> JSON response -> React result display
+  -> Human edits and review -> Browser-generated JSON/Markdown download
+
+The browser calls FastAPI, never GEP directly. Only the backend receives the
+gateway key from configuration. Frontend and backend are separate processes.
+
+Frontend:
+- React manages components and in-memory state.
+- TypeScript defines input/result types and catches compile-time mistakes.
+- Vite serves development files and bundles production assets.
+- Vitest, Testing Library and jsdom test UI behavior.
+
+Backend:
+- Python 3.12+ runs the application.
+- FastAPI provides routes, dependency injection and API documentation.
+- Pydantic v2 validates data and defines the structured-output schema.
+- pydantic-settings loads environment configuration.
+- Uvicorn runs the FastAPI ASGI application.
+- AsyncOpenAI performs asynchronous OpenAI-compatible SDK requests.
+- pytest and httpx MockTransport support offline tests.
+
+The word Agent describes this analysis workflow. It is not an autonomous tool-
+executing agent with browsing, external actions, memory or background planning.
+
+
+3. FILES AND RESPONSIBILITIES
+-----------------------------
+Paths below are relative to requirement-agent/.
+
+README.md: setup instructions, behavior and GEP integration notes.
+VERIFICATION.md: records of earlier checks and their limitations.
+APPLICATION_EXPLANATION.txt: this complete guide.
+.gitignore: excludes private configuration and generated artifacts.
+
+backend/.env: local private settings; never commit or share this file.
+backend/.env.example: safe placeholder settings.
+backend/requirements.txt: pinned direct Python dependencies.
+backend/app/main.py: FastAPI construction, CORS and exception handlers.
+backend/app/schemas.py: request, finding, analysis and response models.
+backend/app/api/routes.py: health, provider-list and analysis routes.
+backend/app/core/config.py: Settings and the absolute environment-file location.
+backend/app/providers/base.py: provider interface and ProviderError.
+backend/app/providers/openai_provider.py: GEP SDK adapter and error translation.
+backend/app/services/analyzer.py: timeout, validation, IDs and evidence checking.
+backend/app/prompts/analysis_v1.txt: versioned analysis system prompt.
+backend/tests/conftest.py: disables real .env loading before test app imports.
+backend/tests/test_app.py: API, schema and service behavior tests.
+backend/tests/test_gep.py: configuration, gateway error and safety tests.
+
+frontend/package.json: dependencies and dev/test/build scripts.
+frontend/package-lock.json: exact resolved frontend dependency tree.
+frontend/vite.config.ts: strict development port and test configuration.
+frontend/tsconfig.json: TypeScript configuration.
+frontend/index.html: page entry point.
+frontend/start.cmd: Windows Node PATH and startup helper.
+frontend/.env.example: public backend-address example, without a gateway key.
+frontend/src/main.tsx: mounts App in React.StrictMode and loads styles.
+frontend/src/App.tsx: providers, loading, errors and result state.
+frontend/src/types.ts: result types, findings and section labels.
+frontend/src/api/client.ts: FastAPI HTTP client and browser error handling.
+frontend/src/components/StoryForm.tsx: input form, example and provider selection.
+frontend/src/components/AnalysisResults.tsx: sections, editing and review controls.
+frontend/src/export.ts: Markdown formatting and JSON/Markdown downloads.
+frontend/src/styles.css: responsive layout and styling.
+frontend/src/test/App.test.tsx: frontend workflow/export tests.
+frontend/src/test/setup.ts: DOM matchers and test cleanup.
+
+.venv, node_modules, dist and caches are generated dependencies/output, not source.
+
+
+4. COMPLETE APPLICATION FLOW
+-----------------------------
+Step 1 - Backend startup
+Uvicorn imports app.main:app. FastAPI is created and routes are registered.
+Settings resolves backend/.env relative to config.py, not an arbitrary working
+directory. CORS uses the configured origin when the application starts.
+
+Step 2 - Frontend startup
+Vite serves the React application. main.tsx mounts App inside React.StrictMode.
+StrictMode can run effects more than once during development, so duplicate
+provider-list requests in development are not necessarily a defect.
+
+Step 3 - Provider discovery
+App calls getProviders(), sending GET /api/v1/providers to FastAPI. The route
+builds a registry using Settings and returns ID, configured model and enabled.
+The key is never part of the returned provider object.
+
+IMPORTANT: enabled means local configuration passed checks. It does not prove
+authentication, network connectivity, model availability or Studio permission.
+The provider-list endpoint does not call GEP.
+
+Step 4 - Input
+StoryForm stores user story, acceptance criteria, context and selection in React
+state. Load example fills the sample story and clears criteria/context.
+
+Step 5 - Submit
+The form prevents normal browser submission and rejects a blank story. App clears
+the previous result/error, sets busy=true and calls analyzeStory(). Input controls
+are disabled while analyzing. Export the current draft before starting another
+analysis because the old result is cleared at the start of the new request.
+
+Step 6 - Browser request
+client.ts POSTs JSON to /api/v1/analyze. Its base address is VITE_API_URL, falling
+back to http://localhost:8000. Content-Type is application/json. The browser
+timeout is 190 seconds. No gateway authorization header is sent by React.
+
+Step 7 - Input validation
+Pydantic validates required fields, types, lengths and unexpected fields. The
+user story is trimmed and whitespace-only input is rejected. Invalid input gets
+a safe 422 error without echoing the source text.
+
+Step 8 - Provider selection
+routes.py looks up request.provider. The current ID is openai for compatibility;
+the UI displays Capgemini GEP. An unknown provider returns a 400 error. There is
+no silent provider fallback.
+
+Step 9 - Analysis timeout
+The service wraps provider.analyze() in asyncio.wait_for with the configured
+LLM_TIMEOUT_SECONDS. This bounds the overall provider operation.
+
+Step 10 - Configuration check
+The adapter checks key, model and URL. Missing settings and known placeholder
+strings produce configuration_error before creating an SDK client.
+
+Step 11 - Model request
+The system prompt comes from analysis_v1.txt. Story, criteria and context are
+JSON-encoded into a separate user message; provider is excluded. AsyncOpenAI
+receives the private key, configured base URL, timeout and max_retries=0.
+
+Step 12 - Gateway operation
+The adapter calls responses.parse with text_format=Analysis and store=False.
+The SDK appends its Responses operation under the configured server prefix.
+It does not call GEP REST /v2/llm/invoke or silently use Chat Completions.
+
+Step 13 - Parse and validate
+The adapter requires response.status=completed and a nonempty parsed result,
+then validates it as Analysis. Refusal, incomplete output and malformed output
+are errors, not fabricated successful analyses.
+
+Step 14 - Backend processing
+The service validates Analysis again, repairs invalid/duplicate IDs, checks
+evidence against input and adds warnings for unsupported explicit claims.
+
+Step 15 - Response
+FastAPI returns provider, model, status=draft, warnings and all five analysis
+sections, validating against AnalysisResponse before serialization.
+
+Step 16 - Display
+React renders section counts, findings, evidence and explicit/inferred labels.
+Empty sections show a no-findings message. Warnings are expandable.
+
+Step 17 - Human review
+Editing or accepting/rejecting updates React state only. It does not call the
+backend or model. The overall response remains a draft.
+
+Step 18 - Export
+The browser serializes the current result as JSON or formats it as Markdown.
+A Blob/object URL triggers download; the temporary URL is revoked afterward.
+No extra gateway request or server storage is involved.
+
+
+5. API CONTRACTS AND DATA STRUCTURES
+------------------------------------
+GET /health
+  Response: {"status":"ok"}
+  Process health only; does not check GEP access, model or quota.
+
+GET /api/v1/providers
+  Illustrative response, not live gateway verification:
+  [{"id":"openai","model":"<configured-model-ID>","enabled":true}]
+
+POST /api/v1/analyze
+  Illustrative input:
+  {
+    "user_story": "As a customer, I want to reset my password.",
+    "acceptance_criteria": "",
+    "context": "",
+    "provider": "openai"
+  }
+
+Request rules:
+- user_story: required; 1 to 12,000 characters; nonblank after trimming.
+- acceptance_criteria: optional; default empty; maximum 12,000 characters.
+- context: optional; default empty; maximum 12,000 characters.
+- provider: optional; default openai; maximum 40 characters.
+- Unexpected properties are forbidden.
+
+Illustrative output shape only, not actual generated output:
+{
+  "provider": "openai",
+  "model": "<configured-model-ID>",
+  "status": "draft",
+  "warnings": [],
+  "analysis": {
+    "functional_requirements": [],
+    "non_functional_requirements": [],
+    "risks": [],
+    "assumptions": [],
+    "clarification_questions": []
+  }
+}
+
+All five arrays are required, even when empty. Each permits up to 50 findings.
+A Finding contains:
+- id: string; missing IDs default to empty and can be repaired.
+- title: 1 to 300 characters.
+- description: 1 to 4,000 characters.
+- evidence: array of strings; at most 20 entries.
+- classification: exactly explicit or inferred.
+
+Frontend-only addition:
+review can be pending, accepted or rejected. It is not in the backend Finding
+schema. JSON exports include it when a reviewer changes a decision. Markdown
+displays pending when review is absent. There is no reviewed-result import API.
+
+
+6. PROMPT AND STRUCTURED OUTPUT
+-------------------------------
+The system prompt requests drafts with all five sections. It tells the model to
+treat source fields as untrusted data, ignore embedded commands that change the
+task, use exact source quotes, label inference, avoid invented business rules
+and numeric thresholds, and ask questions about missing information.
+
+Pydantic Analysis supplies the SDK structured-output schema. The prompt guides
+meaning; the schema constrains structure. A structurally valid answer can still
+be incorrect or incomplete. Neither a schema nor message separation guarantees
+that prompt injection, hallucination or semantic mistakes are eliminated.
+
+The prohibition on invented numeric/business rules is prompt-based. There is no
+complete deterministic semantic checker for every unsupported business rule.
+
+
+7. IDS, EVIDENCE AND CLASSIFICATION
+-----------------------------------
+Valid source IDs begin with an ASCII letter and contain letters, digits,
+underscores or hyphens; the validation pattern allows up to 64 characters.
+Unique valid IDs are preserved across all five sections. Missing, invalid or
+duplicate IDs are repaired using section and position, for example:
+FR-001, NFR-001, RISK-001, ASM-001, Q-001.
+If a candidate collides with a reserved/used ID, -R is appended until unique.
+The same ordered response yields deterministic repair. Separate model runs can
+produce different ordering/content, so IDs are not guaranteed across generations.
+
+Evidence rules:
+- A quote must be nonblank.
+- It must be an exact, case-sensitive substring of story or acceptance criteria.
+- Context-only quotes do not qualify as supported explicit evidence.
+- Unsupported evidence entries are removed.
+- An explicit finding with no supported evidence, or with any unsupported
+  supplied evidence, becomes inferred and receives a warning.
+- Inferred items are not automatically promoted to explicit.
+
+A matching quote proves textual presence, not logical correctness. A model can
+quote real text while overinterpreting it. Reviewers must check the relationship
+between quote and finding. Warnings do not prove all remaining claims are sound.
+
+
+8. GEP CONFIGURATION AND AUTHENTICATION
+----------------------------------------
+GEP has separate OpenAI API and REST API references. This adapter is an
+OpenAI-compatible SDK client and must use the OpenAI reference's server prefix.
+
+Where to obtain configuration:
+- AI Passport Gateway -> OpenAI API reference -> Servers: selected server URL.
+- OpenAI API reference -> Authorize/Security: header name and scheme.
+- GEP Models Catalog -> intended Studio: exact enabled model identifier.
+
+No company reference/screenshots were available to verify those account-specific
+details during the latest changes. No model or base URL is assumed by default.
+A model mentioned in slides does not establish that your Studio enables it.
+
+Private file: requirement-agent/backend/.env
+Placeholder-only example:
+
+GENERATIVE_ENGINE_API_KEY=replace_me_locally
+GENERATIVE_ENGINE_BASE_URL=replace_with_OpenAI_API_reference_server_URL
+GENERATIVE_ENGINE_MODEL=replace_with_enabled_GEP_model
+LLM_TIMEOUT_SECONDS=60
+CORS_ORIGIN=http://localhost:5173
+
+Replace the key only locally in the private file. Never put it in frontend code,
+documentation, screenshots, tickets, chat, logs or Git. Old OPENAI_API_KEY and
+OPENAI_MODEL settings are ignored by the current app.
+
+Defaults: key/model/URL empty; timeout 60 seconds, valid range 1 to 180; CORS
+origin http://localhost:5173. Process environment variables take precedence over
+.env values. An old exported setting can override an edited file. Unknown
+configuration fields are ignored. SecretStr masks key representations; it does
+not encrypt the key or replace a secret-management service.
+
+Current authentication: the SDK receives api_key and uses its normal Bearer
+authentication. No alternate header scheme has been verified/implemented. If
+the company OpenAI reference requires something else, adapt the code only after
+checking that non-secret reference. A URL/model change cannot fix a different
+required authentication scheme by itself.
+
+Current operation: responses.parse, Pydantic Analysis schema, store=False,
+max_retries=0. Confirm Responses, structured output and store=False support for
+the chosen model. There is no model-discovery call, live startup test or automatic
+Chat Completions fallback. Never substitute REST /v2/llm/invoke as the base URL.
+
+Current URL policy:
+- HTTPS on a subdomain ending in .capgemini.com.
+- Default HTTPS port or explicit 443 only.
+- No username/password, query string or fragment in the URL.
+- Reject paths containing /v2/llm.
+- Reject paths ending /invoke, /responses or /chat/completions.
+Use a server prefix, not a complete operation URL. These checks cannot prove a
+permitted host is the correct OpenAI server. If the verified company reference
+uses another domain, change the policy only after verifying that reference.
+
+
+9. FRONTEND REVIEW AND EXPORTS
+-------------------------------
+StoryForm owns input values. App owns providers, result, busy and error.
+AnalysisResults patches the selected finding through onChange using copied
+objects/arrays. Title, description and review changes remain in React memory.
+
+IDs, evidence and classification are displayed but have no editor. They remain
+the original generated metadata even after title/description changes. Reviewers
+must make sure edited claims still agree with displayed evidence.
+
+Accepted/rejected are reviewer annotations, not automatic approval. The backend
+is not notified of those changes. Top-level status stays draft.
+
+The UI disables unconfigured provider options and displays configuration guidance.
+With only an unconfigured provider, the current form can still submit its ID to
+receive a helpful backend configuration error. Enabled is not a connectivity test.
+
+Exports:
+- requirement-analysis.json: current structured result and any review properties.
+- requirement-analysis.md: metadata, warnings, sections, finding text, evidence,
+  classification and review decisions.
+- JSON retains provider ID openai; Markdown displays Capgemini GEP.
+- Export is browser-side and does not make another model request.
+- Gateway credentials are not included in the normal result/export structure.
+- Business requirements and evidence may themselves be sensitive: protect the
+  downloaded files according to company policy.
+
+
+10. ERRORS AND SAFE DIAGNOSTICS
+--------------------------------
+Error JSON shape:
+{"error":{"code":"<safe-code>","message":"<safe-description>"}}
+
+Mappings (public FastAPI status):
+invalid_input                  422: invalid request fields.
+unknown_provider               400: provider ID not registered.
+configuration_error            503: missing/placeholder/invalid configuration.
+authentication_error           503: upstream 401; verify auth/key/server.
+access_denied                  503: upstream 403; verify Studio/model permission.
+quota_or_rate_limit            429: upstream 429 or recognized quota code.
+timeout                        504: upstream 408/504, SDK or service timeout.
+unsupported_model_or_endpoint  502: upstream 404/405/501 or recognized model code.
+unsupported_request            502: upstream 400/422; verify API capabilities.
+gateway_failure                502: other upstream HTTP failure.
+gateway_connection_error       502: network/connection failure.
+invalid_output                 502: incomplete/refused/schema-invalid output.
+internal_error                 500: unexpected application failure.
+
+The logged upstream status differs from the public response when appropriate.
+For example, upstream 401 is recorded as 401 but returned safely as app HTTP 503.
+401/403 alone do not establish the exact root cause.
+
+The adapter logs numeric status, allowlisted upstream codes and fixed descriptions.
+Unknown/malicious code text becomes unrecognized_upstream_error. It does not copy
+raw upstream messages, bodies, complete headers, keys or stories into diagnostics.
+Connection/timeout logs use status=unavailable without an HTTP response. Schema
+validation stages may also lack an exposed HTTP status.
+
+Avoid verbose SDK/HTTP wire logging: externally enabled logging can disclose
+more than the application's restricted diagnostics.
+
+React displays safe backend error messages. Fetch TypeError gives a backend-
+reachability message; DOMException gives timeout guidance. A provider-list error
+offers Retry connection. Starting another analysis clears the previous draft.
+
+
+11. SECURITY AND DATA LIFECYCLE
+--------------------------------
+Browser handles source text, results and review decisions. Backend handles the
+private key and gateway requests. GEP/model processes the submitted source text
+according to company policy. Never send data that company policy disallows.
+
+VITE_API_URL is public build-time configuration and should contain only the
+FastAPI address. Never put a key in a VITE_ variable: it can enter browser assets.
+
+.gitignore excludes .env and .env.* but permits .env.example. It also excludes
+.venv, node_modules, dist, Python caches and TypeScript build metadata. Ignoring
+a previously committed file does not remove it from Git history. Earlier checks
+confirmed backend/.env was ignored and untracked. Regenerate any exposed key.
+
+CORS allows the configured origin, GET/POST and Content-Type. It is a browser
+policy, not authentication or authorization; it does not stop nonbrowser clients.
+
+There is no database, localStorage or sessionStorage persistence. Refresh/close
+loses the draft and edits. A new submission clears the previous result. No
+history, retrieval or reviewed-result import endpoint exists.
+
+store=False is a request setting, not a guarantee about gateway/provider audit
+logs or retention. Relevant company and provider policies still apply.
+
+
+12. WINDOWS SETUP AND STARTUP
+-------------------------------
+Prerequisites: Python 3.12+, compatible Node/npm (Node 24 LTS was used in earlier
+verification) and PowerShell. Commands assume this workspace location.
+
+First-time backend setup:
+cd C:\Users\CHETAN\Desktop\POC\requirement-agent\backend
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+notepad .env
+
+Fill the private settings using verified company instructions. Never overwrite
+an existing populated .env with .env.example.
+
+First-time frontend setup:
+cd C:\Users\CHETAN\Desktop\POC\requirement-agent\frontend
+npm.cmd install
+
+Optional frontend/.env entry:
+VITE_API_URL=http://localhost:8000
+No gateway credential belongs in this file. Frontend changes to this variable
+require restarting Vite or rebuilding production assets.
+
+NORMAL STARTUP - TERMINAL 1:
+cd C:\Users\CHETAN\Desktop\POC\requirement-agent\backend
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host localhost --port 8000
+
+NORMAL STARTUP - TERMINAL 2:
+cd C:\Users\CHETAN\Desktop\POC\requirement-agent\frontend
+.\start.cmd
+
+Keep both terminals open. Use Ctrl+C to stop an existing server before restarting.
+Backend .env edits require a FastAPI restart. Code changes require restart unless
+you deliberately add Uvicorn's optional --reload flag.
+
+start.cmd checks common Node locations, updates its own PATH, checks node/npm,
+changes to the frontend folder and runs npm.cmd run dev. npm.cmd avoids the
+PowerShell npm.ps1 execution-policy issue. Calling the virtual environment's
+python.exe avoids requiring an activation script.
+
+App:       http://localhost:5173
+API docs:  http://localhost:8000/docs
+Health:    http://localhost:8000/health
+
+localhost and 127.0.0.1 are different browser origins. Keep the frontend browser
+URL aligned with CORS_ORIGIN instead of casually switching between them.
+
+
+13. TESTS AND BUILD
+--------------------
+Backend:
+cd C:\Users\CHETAN\Desktop\POC\requirement-agent\backend
+.\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider
+
+Frontend:
+cd C:\Users\CHETAN\Desktop\POC\requirement-agent\frontend
+npm.cmd test
+npm.cmd run build
+
+conftest disables the real environment file before importing the app. Tests use
+synthetic settings, SDK mocks and httpx.MockTransport, not a real key or gateway.
+Coverage includes input/schema validation, empty sections, ID repair, evidence,
+timeouts, errors, CORS, SDK parameters, safe logs, URL/placeholder rejection,
+form/loading/results, editing, reviewer decisions and exports.
+
+Last recorded checks before this documentation-only task: 40 backend tests,
+4 frontend tests and production build passed. An upstream Starlette/httpx
+TestClient deprecation warning remained. No checks were rerun solely to create
+this text guide. Offline checks do not prove live GEP compatibility.
+
+The production build type-checks TypeScript and creates assets in frontend/dist.
+It does not deploy a site, start FastAPI or configure production security.
+
+
+14. TROUBLESHOOTING
+--------------------
+Port 5173 already in use / backend WinError 10048:
+An existing process owns the address/port. Check whether the application is
+already working. Stop its existing terminal with Ctrl+C before another start.
+Vite strictPort prevents automatic port changes. Do not kill unrelated processes.
+Read-only check:
+Get-NetTCPConnection -State Listen -LocalPort 8000,5173
+
+npm.cmd not recognized:
+Use frontend/start.cmd. If Node is absent, install it and reopen VS Code so
+terminals inherit the updated PATH.
+
+Python module/executable not found:
+Run from backend, use .\.venv\Scripts\python.exe and install requirements.
+The documented Uvicorn command expects app to be importable from that folder.
+
+Configure GENERATIVE_ENGINE settings message:
+Save the four required names, replace placeholders, confirm the URL policy and
+restart FastAPI. Process environment values can override the file. This error
+is local configuration checking, not proof of an invalid key.
+
+GEP HTTP 401:
+Confirm OpenAI reference server/security instructions and regenerated key validity.
+Do not use the REST server or invoke operation. Bearer behavior must match the
+reference; do not guess a different header.
+
+GEP HTTP 403:
+Check Studio membership, key scope/permissions, model entitlements and corporate
+network restrictions. A valid key can still lack permission.
+
+Unsupported model/endpoint:
+Copy the identifier exactly from the intended Studio's Models Catalog. Verify
+Responses and structured JSON-schema support. An old slide is not proof of access.
+
+Quota/rate limit:
+Check Studio budget/usage/quota or retry later. The app does not silently retry
+or switch to another model.
+
+Connection failure/timeout:
+Check VPN, network, proxy/TLS policy and gateway availability. Do not disable TLS
+verification as a shortcut. Increasing timeout does not fix permission errors.
+
+Backend unreachable/CORS:
+Confirm FastAPI is running, VITE_API_URL points to it and the browser origin
+matches CORS_ORIGIN. Health verifies the process, not gateway access.
+
+Invalid output:
+Check model structured-output support and whether the response was refused or
+incomplete. The app does not substitute fake findings for failed output.
+
+Lost edits:
+Results are memory-only. Export before refresh, page close or another analysis.
+
+
+15. EXTENSION POINTS AND LIMITATIONS
+-------------------------------------
+To add a provider, implement providers/base.py's interface: name, model, enabled,
+async analyze(request) -> Analysis. Add backend-only settings, translate errors
+to ProviderError, register it in get_providers and add offline adapter tests.
+The UI discovers IDs automatically; add friendly display labels where needed.
+
+Change the gateway operation only after verifying the company reference. A
+Chat Completions adaptation should stay inside the provider and preserve
+Analysis, AnalysisResponse, prompt boundaries, validation and tests. Substituting
+a REST invoke URL is not a compatible operation change.
+
+Production use would require authentication, authorization, TLS, safe monitoring,
+request/body limits, rate/abuse controls and company data-policy review. CORS
+alone is insufficient. Persistence or collaboration would require explicit
+storage, access-control and retention design; none is currently implemented.
+
+Current limits:
+- Live GEP URL/authentication/model/operation support remains unconfirmed without
+  the company reference and an explicitly authorized live test.
+- Schema/evidence checks cannot guarantee semantic correctness or completeness.
+- Prompt injection and invented business rules are not completely eliminated.
+- Model generations and ordering may vary between runs.
+- No streaming, automatic retry, automatic re-analysis after edits or tool use.
+- No saved history, imports, authentication, audit trail or multi-user review.
+
+
+16. EXAMPLE WALKTHROUGH
+------------------------
+Sample story:
+As a registered customer, I want to reset my password using my verified email
+address so that I can regain access to my account.
+
+1. Verify company OpenAI server, authentication and enabled model first.
+2. Configure the backend privately and start both processes.
+3. Open localhost:5173 and click Load example.
+4. Add actual acceptance criteria/context if available.
+5. Click Analyze. This action sends the source text to the configured gateway.
+6. Read all sections, labels, evidence and validation notes.
+7. Verify each explicit claim and challenge assumptions.
+8. Edit unclear text and record human review decisions.
+9. Export JSON for structured data or Markdown for readable sharing.
+10. Keep the result under human review; nothing is automatically approved.
+
+For this story, token lifetime, retry counts, response-time targets and email
+guarantees must not be invented as facts. Missing details should become questions.
+These are illustrative review considerations, not real gateway output.
+
+END OF GUIDE
