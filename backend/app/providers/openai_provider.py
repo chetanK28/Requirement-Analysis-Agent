@@ -41,55 +41,138 @@ def translate_status(exc: APIStatusError) -> ProviderError:
     return error
 
 class OpenAIProvider:
-    # Keep the existing provider ID and analyze response shape for API compatibility.
     name = "openai"
+
     def __init__(self, settings: Settings):
         self.settings = settings
         self.model = settings.generative_engine_model.strip()
-        # Accept a company OpenAI-reference server prefix, not a REST operation URL.
-        # HTTPS and the company domain boundary protect against accidental key exfiltration.
+
         try:
             url = urlsplit(settings.generative_engine_base_url.strip())
             host = (url.hostname or "").lower()
             path = url.path.rstrip("/").lower()
-            self.valid_url = (url.scheme == "https" and host.endswith(".capgemini.com")
-                              and not url.username and not url.password and url.port in (None, 443)
-                              and not url.query and not url.fragment
-                              and "/v2/llm" not in path
-                              and not path.endswith(("/invoke", "/responses", "/chat/completions")))
+
+            self.valid_url = (
+                url.scheme == "https"
+                and host.endswith(".capgemini.com")
+                and not url.username
+                and not url.password
+                and url.port in (None, 443)
+                and not url.query
+                and not url.fragment
+                and "/v2/llm" not in path
+                and not path.endswith(
+                    ("/invoke", "/responses", "/chat/completions")
+                )
+            )
+
         except ValueError:
             self.valid_url = False
+
         key = settings.generative_engine_api_key.get_secret_value().strip()
-        self.enabled = bool(key and key != "replace_me_locally"
-                            and self.model and self.model != "replace_with_enabled_GEP_model"
-                            and self.valid_url)
+
+        self.enabled = bool(
+            key
+            and key != "replace_me_locally"
+            and self.model
+            and self.model != "replace_with_enabled_GEP_model"
+            and self.valid_url
+        )
 
     async def analyze(self, request: AnalysisRequest) -> Analysis:
+
         if not self.enabled:
-            raise ProviderError("configuration_error", "Configure GENERATIVE_ENGINE_API_KEY, GENERATIVE_ENGINE_BASE_URL and an enabled GENERATIVE_ENGINE_MODEL in backend/.env, then restart the backend.", 503)
+            raise ProviderError(
+                "configuration_error",
+                "Configure GENERATIVE_ENGINE_API_KEY, GENERATIVE_ENGINE_BASE_URL and an enabled GENERATIVE_ENGINE_MODEL in backend/.env, then restart the backend.",
+                503,
+            )
+
         try:
+
             async with AsyncOpenAI(
                 api_key=self.settings.generative_engine_api_key.get_secret_value(),
                 base_url=self.settings.generative_engine_base_url.strip(),
-                timeout=self.settings.llm_timeout_seconds, max_retries=0,
+                timeout=self.settings.llm_timeout_seconds,
+                max_retries=0,
             ) as client:
-                # Preserve Responses API and the existing Pydantic structured-output schema.
-                response = await client.responses.parse(
+
+                response = await client.chat.completions.create(
                     model=self.model,
-                    input=[{"role": "system", "content": PROMPT}, {"role": "user", "content": json.dumps(request.model_dump(exclude={"provider"}))}],
-                    text_format=Analysis, store=False,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": PROMPT,
+                        },
+                        {
+                            "role": "user",
+                            "content": json.dumps(
+                                request.model_dump(exclude={"provider"})
+                            ),
+                        },
+                    ],
+                    temperature=0,
                 )
-                if response.status != "completed" or response.output_parsed is None:
-                    raise ProviderError("invalid_output", "Capgemini GEP refused or returned an incomplete analysis. Revise the input or retry.")
-                return Analysis.model_validate(response.output_parsed)
+
+                content = response.choices[0].message.content or ""
+
+                print("\n===== GEP RESPONSE =====")
+                print(content)
+                print("========================\n")
+
+                content = content.strip()
+
+                if content.startswith("```json"):
+                    content = (
+                        content.replace("```json", "")
+                        .replace("```", "")
+                        .strip()
+                    )
+
+                try:
+                    data = json.loads(content)
+                    return Analysis.model_validate(data)
+
+                except Exception as ex:
+                    print("\n===== JSON PARSE ERROR =====")
+                    print(str(ex))
+                    print("===========================\n")
+
+                    raise ProviderError(
+                        "invalid_output",
+                        f"Model returned invalid JSON. Raw output: {content[:500]}",
+                    )
+
         except APITimeoutError:
-            logger.warning("GEP upstream status=unavailable code=timeout message=Gateway request timed out")
-            raise ProviderError("timeout", "Capgemini GEP timed out. Please retry.", 504) from None
+            logger.warning(
+                "GEP upstream status=unavailable code=timeout message=Gateway request timed out"
+            )
+
+            raise ProviderError(
+                "timeout",
+                "Capgemini GEP timed out. Please retry.",
+                504,
+            ) from None
+
         except APIConnectionError:
-            logger.warning("GEP upstream status=unavailable code=connection_error message=Gateway connection failed")
-            raise ProviderError("gateway_connection_error", "Cannot reach Capgemini GEP. Check the company network, VPN and gateway availability.") from None
+            logger.warning(
+                "GEP upstream status=unavailable code=connection_error message=Gateway connection failed"
+            )
+
+            raise ProviderError(
+                "gateway_connection_error",
+                "Cannot reach Capgemini GEP. Check the company network, VPN and gateway availability.",
+            ) from None
+
         except APIStatusError as exc:
             raise translate_status(exc) from None
+
         except (ValidationError, ValueError):
-            logger.warning("GEP upstream status=unavailable code=invalid_output message=Schema validation failed")
-            raise ProviderError("invalid_output", "Capgemini GEP returned output that failed schema validation.") from None
+            logger.warning(
+                "GEP upstream status=unavailable code=invalid_output message=Schema validation failed"
+            )
+
+            raise ProviderError(
+                "invalid_output",
+                "Capgemini GEP returned output that failed schema validation.",
+            ) from None
