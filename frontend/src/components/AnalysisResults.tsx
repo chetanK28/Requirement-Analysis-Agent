@@ -1,3 +1,4 @@
+import {StoryAssessment} from './StoryAssessment';
 import {labels,sections,type Finding,type Result,type Section} from '../types';
 import {download} from '../export';
 export function AnalysisResults({result,onChange}:{result:Result;onChange:(r:Result)=>void}) {
@@ -6,5 +7,6 @@ export function AnalysisResults({result,onChange}:{result:Result;onChange:(r:Res
  <p className="notice">Review each finding. Accepted and rejected labels record your decisions in this browser session; the agent never approves requirements.</p>
  {result.warnings.length>0 && <details><summary>Validation notes ({result.warnings.length})</summary>{result.warnings.map((w,i)=><p key={i}>{w}</p>)}</details>}
  {sections.map(s=><section key={s}><h3>{labels[s]} <span className="count">{result.analysis[s].length}</span></h3>{!result.analysis[s].length && <p className="empty">No findings in this section.</p>}{result.analysis[s].map(f=><article key={f.id} className="finding"><div className="section-heading"><strong>{f.id}</strong><span className={`badge ${f.classification}`}>{f.classification}</span></div><label>Title<input aria-label={`Title ${f.id}`} value={f.title} onChange={e=>edit(s,f.id,{title:e.target.value})}/></label><label>Description<textarea aria-label={`Description ${f.id}`} rows={3} value={f.description} onChange={e=>edit(s,f.id,{description:e.target.value})}/></label><div className="evidence"><strong>Source evidence</strong>{f.evidence.length?f.evidence.map((e,i)=><blockquote key={i}>{e}</blockquote>):<p>No direct evidence supplied.</p>}</div><label>Review decision<select aria-label={`Review ${f.id}`} value={f.review || 'pending'} onChange={e=>edit(s,f.id,{review:e.target.value as Finding['review']})}><option value="pending">Pending review</option><option value="accepted">Accepted by reviewer</option><option value="rejected">Rejected by reviewer</option></select></label></article>)}</section>)}
+ <StoryAssessment result={result} onChange={onChange}/>
  </section>;
 }

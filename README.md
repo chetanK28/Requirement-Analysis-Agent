@@ -116,3 +116,29 @@ Open **GEP Models Catalog**, select the intended Studio, and copy the exact enab
 401 and 403 are distinct: 401 prompts checks of server/authentication/key validity; 403 prompts checks of Studio access, key permissions, model entitlements and network policy. These statuses alone do not establish the root cause. Logs contain numeric status, allowlisted upstream codes and fixed safe descriptions; arbitrary upstream messages, request headers and keys are never copied into diagnostics.
 
 The backend accepts only HTTPS server URLs on Capgemini subdomains, without embedded credentials/query strings, and rejects known REST invoke and operation URLs. If the documented OpenAI server uses another company-approved domain, adjust the host policy only after verifying that reference.
+
+## Story Assessment and reviewer feedback
+
+The analyze response adds complexity_score, complexity_label, complexity_reasons,
+readiness_score, readiness_label and readiness_gaps at the top level. The five
+analysis sections keep their shape. Scores are AI estimates of the original
+story, acceptance criteria and context, not counts of generated findings.
+They are not objective or approval. Missing/invalid fields return invalid_output.
+
+Complexity: 1 one simple action; 2 simple workflow/few rules; 3 several steps or
+moderate rules; 4 multiple rules/roles/integrations/error cases; 5 broad workflow
+with dependencies/conditional paths/security or compliance concerns.
+Labels: 1/2 Low, 3 Moderate, 4 High, 5 Very high.
+Readiness: 1 unclear user/goal; 2 major details missing; 3 important questions
+remain; 4 mostly clear/testable with minor gaps; 5 clear, specific and testable.
+Labels: 1 Needs work, 2/3 Needs clarification, 4 Mostly clear, 5 Ready for review.
+
+Below the generated sections, Story Assessment shows scores, reasons and gaps.
+Usefulness feedback accepts 1-5 and an optional comment. Submit to see the saved
+rating. Feedback stays in page memory; refresh or a new analysis clears it.
+Download JSON/Markdown AFTER submitting feedback to save it alongside assessment
+and finding decisions. Finding edits do not recalculate the original assessment.
+
+Restart FastAPI and Vite, load the sample story, analyze, scroll below the five
+sections, submit feedback and export. Offline tests use synthetic configuration;
+no live gateway call or real key is needed for tests.

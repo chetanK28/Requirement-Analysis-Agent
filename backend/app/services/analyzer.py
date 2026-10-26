@@ -1,16 +1,16 @@
 import asyncio
 import re
 from pydantic import ValidationError
-from app.schemas import Analysis, AnalysisRequest, AnalysisResponse, SECTIONS
+from app.schemas import Analysis, AnalysisRequest, AnalysisResponse, ModelAnalysis, StoryAssessment, SECTIONS
 from app.providers.base import Provider, ProviderError
 
 async def analyze(request: AnalysisRequest, provider: Provider, timeout: float = 60) -> AnalysisResponse:
     try:
-        result = Analysis.model_validate(await asyncio.wait_for(provider.analyze(request), timeout=timeout))
+        result = ModelAnalysis.model_validate(await asyncio.wait_for(provider.analyze(request), timeout=timeout))
     except asyncio.TimeoutError:
         raise ProviderError("timeout", "Analysis timed out. Please retry.", 504) from None
     except ValidationError:
-        raise ProviderError("invalid_output", "Provider output failed schema validation.") from None
+        raise ProviderError("invalid_output", "Provider returned invalid analysis or Story Assessment fields. Please retry.") from None
     warnings, used = [], set()
     # Preserve valid globally unique IDs; reserve them before repairing duplicates.
     reserved = {item.id for section in SECTIONS for item in getattr(result, section) if re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]{0,63}", item.id)}
@@ -29,4 +29,4 @@ async def analyze(request: AnalysisRequest, provider: Provider, timeout: float =
             if len(supported) != len(item.evidence):
                 warnings.append(f"{item.id}: unsupported evidence removed.")
             item.evidence = supported
-    return AnalysisResponse(provider=provider.name, model=provider.model, warnings=warnings, analysis=result)
+    return AnalysisResponse(provider=provider.name, model=provider.model, warnings=warnings, analysis=Analysis.model_validate(result.model_dump(include=set(SECTIONS))), **result.model_dump(include=set(StoryAssessment.model_fields)))

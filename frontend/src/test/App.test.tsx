@@ -6,7 +6,7 @@ import {markdown,download} from '../export';
 import type {Result} from '../types';
 import {analyzeStory,getProviders} from '../api/client';
 vi.mock('../api/client',()=>({getProviders:vi.fn(),analyzeStory:vi.fn()}));
-const result:Result={provider:'openai',model:'test-model',status:'draft',warnings:[],analysis:{functional_requirements:[{id:'FR-1',title:'Reset',description:'Allow reset',evidence:['reset password'],classification:'explicit'}],non_functional_requirements:[],risks:[],assumptions:[],clarification_questions:[]}};
+const result:Result={provider:'openai',model:'test-model',status:'draft',complexity_score:2,complexity_label:'Low',complexity_reasons:['A simple original workflow'],readiness_score:3,readiness_label:'Needs clarification',readiness_gaps:['Success conditions missing'],warnings:[],analysis:{functional_requirements:[{id:'FR-1',title:'Reset',description:'Allow reset',evidence:['reset password'],classification:'explicit'}],non_functional_requirements:[],risks:[],assumptions:[],clarification_questions:[]}};
 beforeEach(()=>{vi.resetAllMocks();vi.mocked(getProviders).mockResolvedValue([{id:'openai',model:'test-model',enabled:true}]);});
 describe('review workflow',()=>{
  it('validates a blank story and loads the example',()=>{

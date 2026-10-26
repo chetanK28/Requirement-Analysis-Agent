@@ -6,7 +6,7 @@ from openai import AsyncOpenAI, APIConnectionError, APITimeoutError, APIStatusEr
 from pydantic import ValidationError
 from app.core.config import Settings
 from app.providers.base import ProviderError
-from app.schemas import Analysis, AnalysisRequest
+from app.schemas import ModelAnalysis, AnalysisRequest
 
 PROMPT = (Path(__file__).resolve().parents[1] / "prompts" / "analysis_v1.txt").read_text(encoding="utf-8")
 logger = logging.getLogger(__name__)
@@ -64,7 +64,7 @@ class OpenAIProvider:
                             and self.model and self.model != "replace_with_enabled_GEP_model"
                             and self.valid_url)
 
-    async def analyze(self, request: AnalysisRequest) -> Analysis:
+    async def analyze(self, request: AnalysisRequest) -> ModelAnalysis:
         if not self.enabled:
             raise ProviderError("configuration_error", "Configure GENERATIVE_ENGINE_API_KEY, GENERATIVE_ENGINE_BASE_URL and an enabled GENERATIVE_ENGINE_MODEL in backend/.env, then restart the backend.", 503)
         try:
@@ -77,11 +77,11 @@ class OpenAIProvider:
                 response = await client.responses.parse(
                     model=self.model,
                     input=[{"role": "system", "content": PROMPT}, {"role": "user", "content": json.dumps(request.model_dump(exclude={"provider"}))}],
-                    text_format=Analysis, store=False,
+                    text_format=ModelAnalysis, store=False,
                 )
                 if response.status != "completed" or response.output_parsed is None:
                     raise ProviderError("invalid_output", "Capgemini GEP refused or returned an incomplete analysis. Revise the input or retry.")
-                return Analysis.model_validate(response.output_parsed)
+                return ModelAnalysis.model_validate(response.output_parsed)
         except APITimeoutError:
             logger.warning("GEP upstream status=unavailable code=timeout message=Gateway request timed out")
             raise ProviderError("timeout", "Capgemini GEP timed out. Please retry.", 504) from None
@@ -92,4 +92,4 @@ class OpenAIProvider:
             raise translate_status(exc) from None
         except (ValidationError, ValueError):
             logger.warning("GEP upstream status=unavailable code=invalid_output message=Schema validation failed")
-            raise ProviderError("invalid_output", "Capgemini GEP returned output that failed schema validation.") from None
+            raise ProviderError("invalid_output", "Capgemini GEP returned invalid analysis or Story Assessment fields. Please retry.") from None

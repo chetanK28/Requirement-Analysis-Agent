@@ -1,5 +1,5 @@
 from typing import Protocol
-from app.schemas import Analysis, AnalysisRequest
+from app.schemas import ModelAnalysis, AnalysisRequest
 
 class ProviderError(Exception):
     def __init__(self, code: str, message: str, status: int = 502):
@@ -10,4 +10,4 @@ class Provider(Protocol):
     name: str
     model: str
     enabled: bool
-    async def analyze(self, request: AnalysisRequest) -> Analysis: ...
+    async def analyze(self, request: AnalysisRequest) -> ModelAnalysis: ...
