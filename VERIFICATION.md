@@ -18,3 +18,16 @@ Dependencies were installed locally. Backend direct versions are pinned; fronten
 - Git check-ignore confirms backend/.env is ignored; git ls-files confirms it is not tracked.
 - Existing Responses API operation and Analysis response schema preserved. GEP support and the enabled model ID remain unconfirmed because no company starter kit/slides are in the repository.
 - Backend checks report the existing upstream Starlette/httpx deprecation warning. The first run also reported an inaccessible existing pytest cache; verification can run with `-p no:cacheprovider`.
+
+
+## Document upload verification
+
+- Backend: 90 tests passed (existing Starlette/httpx deprecation warning only).
+- Frontend: 15 tests passed; TypeScript/Vite production build passed.
+- PDF, encrypted/blank PDF, DOCX paragraph/table/nested-table extraction, invalid
+  extensions/MIME types, corrupt/empty/oversized files, extracted text limits,
+  early multipart limits and upload cleanup are covered by offline tests.
+- UI checks cover file selection, loading, preview/editing, reviewed-text analysis,
+  switching back to preserved manual input, errors and clearing stale previews.
+- Extraction has no model calls; existing /api/v1/analyze workflow remains intact.
+- No real .env values were opened/changed and no live GEP calls were made.

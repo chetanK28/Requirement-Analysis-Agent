@@ -65,3 +65,7 @@ class AnalysisResponse(StoryAssessment):
     analysis: Analysis
 
 SECTIONS = tuple(Analysis.model_fields)
+
+class ExtractionResponse(StrictModel):
+    text: str = Field(min_length=1, max_length=12000)
+    character_count: int

@@ -14,3 +14,8 @@ async function request<T>(path:string, options?:RequestInit):Promise<T> {
 }
 export const getProviders = () => request<Provider[]>('/api/v1/providers');
 export const analyzeStory = (story:Story) => request<Result>('/api/v1/analyze', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(story)});
+export type Extraction = {text:string; character_count:number};
+export const extractDocument = (file:File) => {
+ const form = new FormData();form.append('file',file);
+ return request<Extraction>('/api/v1/extract-file',{method:'POST',body:form});
+};

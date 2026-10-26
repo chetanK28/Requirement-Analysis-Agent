@@ -142,3 +142,52 @@ and finding decisions. Finding edits do not recalculate the original assessment.
 Restart FastAPI and Vite, load the sample story, analyze, scroll below the five
 sections, submit feedback and export. Offline tests use synthetic configuration;
 no live gateway call or real key is needed for tests.
+## PDF and Word upload
+
+Choose Upload document beside Enter manually. Select a text-based PDF (.pdf) or
+Word DOCX (.docx), at most 10 MB (10 MiB), then click Extract text. The selected
+filename and extraction loading state are shown. Extraction alone never calls
+GEP. Review/correct the extracted-text preview, optionally add acceptance criteria
+and context, then click Analyze. This sends the reviewed text as user_story to
+the existing /api/v1/analyze service. Assessment, review decisions, feedback and
+JSON/Markdown exports behave as before. Manual drafts are retained when switching
+input methods. Selecting another file clears its previous extracted preview.
+
+The separate POST /api/v1/extract-file accepts multipart field file and returns
+text and character_count. It validates extension, MIME type, file size and parsed
+content. It uses pypdf for selectable PDF text and python-docx for DOCX body
+paragraphs/tables, including nested tables. Parsing occurs in a worker thread.
+The request body is bounded before multipart parsing; temporary upload handles
+are closed after processing. No files are retained and no database/OCR is added.
+
+Extracted text is limited to the existing 12,000-character story field; longer
+content is rejected rather than truncated. Use a shorter document or paste the
+relevant excerpt manually. Legacy .doc, encrypted/password-protected documents,
+corrupt/empty documents and mismatched types produce safe errors. Scanned or
+image-only PDFs with no selectable text explain that OCR is unsupported.
+PDF table layout/reading order may be imperfect. Headers, footers, text boxes,
+images, tracked changes and advanced Word layouts are not guaranteed to extract.
+Always review the preview. A mixed scanned/text PDF may omit image-only content.
+For resource limits, PDFs are capped at 200 pages and expanded DOCX packages at
+32 MiB/2,000 ZIP entries. Extracted text remains untrusted user input under the
+existing system prompt; it cannot intentionally change the analysis instructions.
+
+To try locally, update backend dependencies and restart FastAPI:
+
+```powershell
+cd C:\Users\CHETAN\OneDrive\Desktop\POC\requirement-agent\backend
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host localhost --port 8000
+```
+
+In another terminal:
+
+```powershell
+cd C:\Users\CHETAN\OneDrive\Desktop\POC\requirement-agent\frontend
+.\start.cmd
+```
+
+Stop an existing server with Ctrl+C before restarting. At http://localhost:5173,
+try a DOCX with a paragraph/table and a text-based PDF; edit the preview before
+Analyze. Try a scan-only PDF to see the no-OCR guidance. Extraction works without
+a GEP key; Analyze still requires your existing private GEP configuration.
